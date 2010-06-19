@@ -1,0 +1,9 @@
+RSS Feeds for the Plan Follower Thing:
+
+Sample RSS feed:
+http://pipes.yahoo.com/pipes/pipe.run%3F_id%3Df14707979d3a4c36ed94907a632af6f0%26_render%3Drss%26blog_sname%3Dtesting_sandpit%26labblogurl%3Dhttp%253A%252F%252Fbiolab.isis.rl.ac.uk%26sectioninput%3DSampleCreationPlan
+
+UV-Vis Measurement Instance RSS feed:
+http://pipes.yahoo.com/pipes/pipe.run%3F_id%3Df14707979d3a4c36ed94907a632af6f0%26_render%3Drss%26blog_sname%3Dtesting_sandpit%26labblogurl%3Dhttp%253A%252F%252Fbiolab.isis.rl.ac.uk%26sectioninput%3DUV-VisPlan
+
+http://www.dropbox.com/24359/535248/701d9d1/events.xml
