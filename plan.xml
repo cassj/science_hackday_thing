@@ -1,0 +1,22 @@
+<plan>
+	<plan_step>
+		<name>UV-VisPlan</name>
+		<requires>
+			<object_type>Sample</object_type>
+			<role>Sample</role>
+			<Material>Solution</Material>
+			<location method=json>http://pipes.yahoo.com/pipes/pipe.run?_id=f14707979d3a4c36ed94907a632af6f0&_render=json&blog_sname=testing_sandpit&labblogurl=http%3A%2F%2Fbiolab.isis.rl.ac.uk&sectioninput=SampleCreationPlan</location>
+		</requires>
+		<emits>
+			<object_type>UV-VisSpectrum</object_type>
+			<format>xlsx</format>
+			<location method=xml>http://www.dropbox.com/24359/535248/701d9d1/events.xml</location>
+		</emits>
+		<follows>SampleCreationPlan</follows>
+	</plan_step>
+</plan>
+	
+			
+			
+				
+			
