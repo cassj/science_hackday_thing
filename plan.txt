@@ -1,0 +1,20 @@
+<plan>
+	<plan_step>
+		<name>XXX</name>
+		<requires>
+			<object_type>XXX</object_type>
+			<location method=XXX>http://XXX</location>
+			<location method=XXX>http://XXX</location>
+		</requires>
+		<emits>
+			<object_type>XXX</object_type>
+			<location method=XXX>http://XXXX</location>
+		</emits>
+		<follows>XXX</follows>
+	</plan_step>
+</plan>
+	
+			
+			
+				
+			
