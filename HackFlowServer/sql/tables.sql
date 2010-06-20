@@ -24,9 +24,11 @@ create table tags(
 /* An event, corresponding to a step in the plan */
 create table event(
    id INT NOT NULL PRIMARY KEY AUTO_INCREMENT,
-   event_uri TEXT NOT NULL,
+   stage_identifier VARCHAR(255) NOT NULL,s
    experiment_id INT NOT NULL REFERENCES experiment(id),
-   status enum ('PLANNED', 'COMPLETE','FAILED') NOT NULL
+   status enum ('PLANNED', 'PENDING', 'COMPLETE','FAILED') NOT NULL,
+   title VARCHAR(255),
+   description TEXT
 );
 
 /* Bits of metadata that must be defined before the event can be run*/

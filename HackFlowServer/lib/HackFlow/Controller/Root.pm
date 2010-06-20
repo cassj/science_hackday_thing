@@ -50,22 +50,28 @@ sub index :Path :Args(0) {
     unless ($plan_uri || $expt_id){
          $c->stash->{submission_success}=0;
          $c->stash->{error_message}="No 'plan_uri' or 'experiment_id' key found in the submission";
-         $c->forward('View::JSON');
+         $c->detach('View::JSON');
      }
 
      #fetch experiment or create a new one
      my $expt;
      if ($plan_uri){
+       warn "\n $plan_uri \n";
+    
+       $plan_uri =~ s/\%2f/\//i;
+
+       #check it's a full uri
+       $plan_uri = "http://$plan_uri" unless ($plan_uri =~ /w+\:\/\/.*/);
+
+	$data->{plan_uri} = $plan_uri;
+
+
+         warn "Creating new experiment for plan $plan_uri";
         $expt = $self->create_experiment($c,$data);
         delete $data->{plan_uri};
-        #post to http://science.heroku.com/experiment with {experiment_id};
-       
-        my $res = $self->to_front_controller({experiment=>{experiment_id => $expt->id,
-                                                           resource_url => 'http://a.fake.url.com/'
-                                  }});
-
      }else{
         $expt = $c->model('DB::Experiment')->find({id => $expt_id});
+        warn "Usign experiment ". $expt->id;
         delete $data->{experiment_id};
      }
 
@@ -73,7 +79,7 @@ sub index :Path :Args(0) {
      unless($expt){          
          $c->stash->{submission_success}=0;
          $c->stash->{error_message}="No 'plan_uri' or 'experiment_id' key found in the submission";
-         $c->forward('View::JSON');
+         $c->detach('View::JSON');
      }
 
 
@@ -91,44 +97,92 @@ sub create_experiment{
    my ($self,$c, $data) = @_;
    my $url = $data->{plan_uri};
 
-   my  $request = HTTP::Request->new(GET => $url);
+   my $request = HTTP::Request->new(GET => $url);
    my $ua = LWP::UserAgent->new;
    my $response = $ua->request($request);
 
-   my $plan = XMLin($response->content);
-   die Dumper $plan;
-
-   my $stages =  $plan->{"eo:ExperimentPlanStage"};
-   foreach (@$stages){
-      my $rdf_res  = $_->{'eo:requires'}->{'rdf:resource'} ;
-      die $rdf_res;
+   unless ($response->code == 200){
+      $c->stash->{error_message} = "Couldn't retrieve URL: ".$response->message;
+      $c->stash->{submission_success} = 0;
+      $c->detach('View::JSON');
    }
 
+   unless ($response->content) {
+      $c->stash->{error_message} = "Couldn't retrieve URL $url";
+      $c->stash->{submission_success} = 0;
+      $c->detach('View::JSON');
+    }
+
+   my $plan = XMLin($response->content);
+   warn "Got Plan";
 
    #generate a new experiment from it,
    my $expt = $c->model('DB::Experiment')->create({
          user_id => 1,
          plan_uri => $data->{'plan_uri'},
    });
+   warn "Made New Expt";
+
+   #parse the plan to get the required requirements.
+   my $stages =  $plan->{"eo:ExperimentPlanStage"};
+   foreach my $stage (@$stages){
+      my $event = $c->model('DB::Event')->create({
+	   experiment_id => $expt->id,
+           description => $stage->{'dc:description'},
+           title => $stage->{'dc:title'},
+           stage_identifier => $stage->{'rdf:about'},
+	});
+      warn "Created new event ".$event->id;
+
+      my $reqs  = $stage->{'eo:requires'};     
+      my $subst = defined($plan->{"eo:YetToExistSubstance"}) ? $plan->{"eo:YetToExistSubstance"} : [];
+      my $files = defined($plan->{"eo:YetToExistFile"}) ? $plan->{"eo:YetToExistFile"} : [];
+
+      #All events have a required tag with the same name as their stage_identifier which holds their URI
+      my $new_tag = $c->model('DB::Tag')->create({name=>$event->stage_identifier, experiment_id=>$expt->id});
+      my $event_req_tags = $c->model('DB::EventRequiredTag')->create({tag_id => $new_tag->id, event_id => $event->id});
+
+      foreach my $tag (values %$reqs ){
+
+        my ($tag_info) =  grep {$_->{'rdf:about'} eq $tag} @$subst;
+        #create or retrieve a tag
+
+       my $new_tag =  $c->model('DB::Tag')->search({name=>$tag, experiment_id=>$expt->id})->next 
+	          || $c->model('DB::Tag')->create({name=>$tag, experiment_id=>$expt->id}) ;
+
+       warn "created or retrieved tag ".$new_tag->id;
+
+       #link tag to this event
+       my $event_req_tags = $c->model('DB::EventRequiredTag')->create({tag_id => $new_tag->id, event_id => $event->id});
+       warn 'linked tag '.$new_tag->id.'to event '.$event->id; 
+     }
+   }
+
    return $expt;
 }
+
+
+
 
 sub tag_experiment{
   my ($self,$c, $expt, $data) = @_;
   foreach my $key (keys %$data){
-     my $tag = $c->model('DB::Tag')->create({
-       name => $key,
-       experiment_id => $expt->id,
-       value => $data->{$key}
-     });
+
+    my $tag =  $c->model('DB::Tag')->search({name=>$key, experiment_id=>$expt->id})->next
+               || $c->model('DB::Tag')->create({name=>$key, experiment_id=>$expt->id}) ;
+
+    $tag->value($key);
+    $tag->update;
   }
   
-  $self->try_events($c, $expt);
+  $self->inspect_pending_events($c, $expt);
    
 }
 
-sub try_events{
+sub inspect_pending_events{
    my ($self,$c, $expt) = @_;
+
+   warn "Checking pending experiments";
 
    #fetch the events we haven't run yet for this experiment
    my $planned_events = $c->model('DB::Event')->search({
@@ -136,28 +190,52 @@ sub try_events{
       status => 'PLANNED'
    });
 
-   my $tags = $expt->tags;
 
-   #check the metadata for each one and run it if
-   while(my $event = $planned_events->next){
-      my $req = $event->required_tags;
-       
+   #if we don't have any planned events left we're done.
+   return unless $planned_events->count > 0;
 
+   #have we got a uri for it? if so, tell the front controller
+    while( my $event = $planned_events->next ){
+        warn "Checking URI for event ".$event->stage_identifier;
+   
+        #find the uri tag 
+        my $tags = $c->model('DB::Tag')->search({
+           experiment_id => $expt->id,
+           name => $event->stage_identifier,
+         });
+       #does it have a value?
+       my $uri = $tags->next->value;
+       #run this event, if it does,
+       $self->run_event($c, $event, $uri) if $uri;
     }
+
+    #are we wating for anything? if not, we probably need to trigger an alert,
+    my $pending_events = $c->model('DB::Event')->search({
+      experiment_id => $expt->id,
+      status => 'PENDING'
+   });
+   unless($pending_events->count > 0){
+      $self->resolve($c, $expt);
+   }
 }
 
 
 sub run_event{
-#   my($self,$c,$event, $uri) = @_;
+   my($self,$c,$event, $uri) = @_;
 
-   #trigger the event
+   warn "Running event ". $event->stage_identifier; 
 
-  
    #tell the front controller to watch for a result.
-#   my $res = $self->to_front_controller({experiment=>{experiment_id => $event->experiment->id,
-#                                                      resource_url => $uri;
-#                                        }});
+   my $res = $self->to_front_controller({event =>{
+                                            resource_uri => $uri, 
+                                            plan_uri => $event->experiment->plan_uri, 
+                                            experiment_id => $event->experiment->id,
+                                            stage_identifier => $event->stage_identifier
+ 
+                                        }});
 
+   $event->status('PENDING');
+   $event->update;
 
 }
 
@@ -177,7 +255,10 @@ sub to_front_controller{
 }
 
 
-
+sub resolve {
+  my ($c, $expt) = @_;
+  #do some stuff.
+}
 
 
 =head2 default
