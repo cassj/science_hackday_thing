@@ -1,6 +1,16 @@
+create table user(
+  id INT NOT NULL PRIMARY KEY AUTO_INCREMENT,
+  username VARCHAR(255) NOT NULL,
+  forename VARCHAR(255),
+  surname VARCHAR(255), 
+  email VARCHAR(255),
+  phone VARCHAR(255)
+);
+
 create table experiment(
    id INT NOT NULL PRIMARY KEY AUTO_INCREMENT,
-   plan_uri TEXT NOT NULL
+   plan_uri TEXT NOT NULL,
+   user_id VARCHAR(255) NOT NULL REFERENCES user(id)
 );
 
 /* all keys assoc with an experiment (and their vals as we get them) */

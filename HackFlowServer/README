@@ -1,1 +1,7 @@
 Run script/hackflow_server.pl to test the application.
+
+Note to self:
+
+generate static model from mysql tables with DBIC::Schema::Loader
+
+script/hackflow_create.pl model DB DBIC::Schema HackFlow::Schema create=static dbi:mysql:hackflow hackflow hackflow
