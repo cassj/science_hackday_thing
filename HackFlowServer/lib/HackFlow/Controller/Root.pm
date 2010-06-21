@@ -56,6 +56,7 @@ sub index :Path :Args(0) {
      #fetch experiment or create a new one
      my $expt;
      if ($plan_uri){
+       #This is a new plan!
        warn "\n $plan_uri \n";
     
        $plan_uri =~ s/\%2f/\//i;
@@ -70,8 +71,15 @@ sub index :Path :Args(0) {
         $expt = $self->create_experiment($c,$data);
         delete $data->{plan_uri};
      }else{
+        #this is the result of an event, more metadata to add to an existing expt
         $expt = $c->model('DB::Experiment')->find({id => $expt_id});
-        warn "Usign experiment ". $expt->id;
+        warn "Using experiment ". $expt->id;
+
+        my $event = $c->model('DB::Event')->search({experiment_id => $expt_id, stage_identifier => $data->{stage_identifier}});
+        $event = $event->next;
+        warn "Using event ". $event->id;
+        $event->status('COMPLETE');        
+
         delete $data->{experiment_id};
      }
 
@@ -167,11 +175,10 @@ sub create_experiment{
 sub tag_experiment{
   my ($self,$c, $expt, $data) = @_;
   foreach my $key (keys %$data){
-
     my $tag =  $c->model('DB::Tag')->search({name=>$key, experiment_id=>$expt->id})->next
                || $c->model('DB::Tag')->create({name=>$key, experiment_id=>$expt->id}) ;
 
-    $tag->value($key);
+    $tag->value($data->{$key});
     $tag->update;
   }
   
@@ -246,10 +253,10 @@ sub to_front_controller{
   my $json = encode_json $message;        
   my $h = HTTP::Headers->new;
         $h->header('Content-Type' => 'application/json',
-                    User_Agent   => 'HackFlow/0.00000000000000001'
+                    User_Agent   => 'HackFlow/0.00000000000000001alpha'
                   );
   my  $request = HTTP::Request->new(POST => 'http://science.heroku.com/experiments', $h, $json);
-  my $ua = LWP::UserAgent->new;
+  my  $ua = LWP::UserAgent->new;
   my  $response = $ua->request($request);
 
 }
